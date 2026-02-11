@@ -1,0 +1,40 @@
+Package: Mosasaur
+Title: Analysis of Oxford Nanopore Technology Long-Read Sequencing Methylation Data
+Version: 0.0.0.9000
+Authors@R: c(
+    person("Kip", "Zimmerman", email = "kdzimmer@wakehealth.edu", 
+           comment = c(ORCID = "0000-0002-2943-6612"), 
+           role = c("aut", "cre")),
+    person("Lauren", "Patterson", email = "lepatter@wakehealth.edu", 
+           comment = c(ORCID = "0009-0006-4835-8644"), 
+           role = "aut"))
+Description: This package was created for the analysis of Oxford Nanopore Long Read Modification data. 
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.3
+Imports:
+    data.table,
+    MGLM,
+    GenomicRanges,
+    GenomeInfoDb,
+    rtracklayer,
+    IRanges,
+    dplyr,
+    tidyr,
+    purrr,
+    stats,
+    utils,
+    ENmix, 
+    PQLseq2,
+    GenomicFeatures,
+    S4Vectors,
+    ggtern,
+    ggplot2,
+    rlang,
+    methods
+Remotes:
+    zhengli09/PQLseq2
+Suggests:
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3
