@@ -23,7 +23,7 @@ sim_mod(
 
 \item{n_cpg}{Number of CpG sites.}
 
-\item{m}{Total count (coverage) per CpG site per sample.}
+\item{m}{Total count (or coverage) per CpG site per sample.}
 
 \item{alpha}{Numeric vector of length \code{d} (Dirichlet parameters) for controls.}
 

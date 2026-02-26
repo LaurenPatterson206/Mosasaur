@@ -33,46 +33,22 @@ If \code{add_metrics = TRUE}, includes computed metric columns. Also stores:
 \description{
 Computes per-site QC and modification metrics from a merged bedMethyl table
 (output of \code{\link{merge_data}}) and filters rows using a user-provided
-set of criteria. Criteria are named ranges over derived metrics, enabling
-filtering for coverage/missingness and multiple comparisons such as methyl vs
-unmodified, hydroxy vs unmodified, and methyl vs hydroxy.
+set of criteria. Percent/ratio metrics are computed only among samples with a coverage
+greater than zero.
 }
 \details{
 Supported metric names for \code{criteria}:
 \describe{
-\item{Mean_Coverage}{Mean coverage across samples.}
+\item{Mean_Coverage}{Mean coverage across all samples (zeros included).}
 \item{Missing}{Fraction of samples with 0 coverage (0 to 1).}
-\item{Percent_Methyl}{Mean methyl / mean coverage (0 to 1).}
-\item{Percent_Hydroxy}{Mean hydroxy / mean coverage (0 to 1).}
-\item{Percent_Modified}{(Mean methyl + mean hydroxy) / mean coverage (0 to 1).}
-\item{Ratio_Methyl_Hydroxy}{Mean methyl / mean hydroxy (0 to Inf).}
-\item{Ratio_Methyl_Unmodified}{Mean methyl / mean unmethyl (0 to Inf).}
-\item{Ratio_Hydroxy_Unmodified}{Mean hydroxy / mean unmethyl (0 to Inf).}
-\item{Fraction_Hydroxy_of_Modified}{Mean hydroxy / (mean methyl + mean hydroxy) (0 to 1).}
+\item{Percent_Methyl}{Mean methyl / mean coverage among covered samples (0 to 1+).}
+\item{Percent_Hydroxy}{Mean hydroxy / mean coverage among covered samples (0 to 1+).}
+\item{Percent_Modified}{(Mean methyl + mean hydroxy) / mean coverage among covered samples (0 to 1+).}
+\item{Ratio_Methyl_Hydroxy}{Mean methyl / mean hydroxy among covered samples (0 to Inf).}
+\item{Ratio_Methyl_Unmodified}{Mean methyl / mean unmethyl among covered samples (0 to Inf).}
+\item{Ratio_Hydroxy_Unmodified}{Mean hydroxy / mean unmethyl among covered samples (0 to Inf).}
+\item{Fraction_Hydroxy_of_Modified}{Mean hydroxy / (mean methyl + mean hydroxy) among covered samples (0 to 1).}
 }
 
 Ratios use a small epsilon in denominators to avoid division by zero.
-}
-\examples{
-\dontrun{
-# QC-only filtering
-filtered <- filter_data(
-  merged,
-  criteria = list(
-    Mean_Coverage = c(20, Inf),
-    Missing = c(0, 0.30)
-  )
-)
-
-# Methyl vs unmodified (ratio), plus QC
-filtered_m_u <- filter_data(
-  merged,
-  criteria = list(
-    Mean_Coverage = c(20, Inf),
-    Missing = c(0, 0.30),
-    Ratio_Methyl_Unmodified = c(2, Inf)
-  )
-)
-}
-
 }

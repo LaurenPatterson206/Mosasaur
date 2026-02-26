@@ -1,197 +1,193 @@
-#' Run PQLseq2 on prepared count matrices (beta-binomial mixed model)
+#' Run PQLseq2
 #'
-#' Fits a beta-binomial mixed model at each CpG site using \code{PQLseq2::pqlseq2()},
-#' supporting arbitrary predictors and covariates with an optional kinship matrix.
-#' If no kinship matrix is provided, an identity matrix is used. Results are
-#' filtered to keep only \code{converged == TRUE} (if present).
+#' Runs \code{PQLseq2::pqlseq2()} for a binomial mixed model using count matrices
+#' from \code{\link{prepare_data}} and a phenotype CSV.
 #'
-#' This function can take either:
-#' \itemize{
-#'   \item \code{prep}: the list output of \code{\link{prepare_data}} (preferred)
-#'   \item or file paths \code{mcounts_file} and \code{tcounts_file}
-#' }
+#' Designed to be stable for small cohorts by automatically filtering
+#' problematic sites and preventing known PQLseq2 crashes.
 #'
 #' @param pheno_file Path to a CSV phenotype file.
-#' @param prep Optional list output from \code{\link{prepare_data}} containing
-#'   \code{MCounts} and \code{TCounts}. If provided, \code{mcounts_file} and
-#'   \code{tcounts_file} are ignored.
-#' @param kinship_file Optional path to a kinship matrix file (tab-delimited, square).
-#'   If \code{NULL}, an identity matrix is used.
-#' @param mcounts_file Path to an MCounts file (ignored if \code{prep} provided).
-#' @param tcounts_file Path to a TCounts file (ignored if \code{prep} provided).
-#' @param output_file Path to write tab-delimited PQLseq2 results.
-#' @param predictor_var Column name in phenotype file used as predictor (W).
-#'   Must be numeric or coercible to numeric without introducing NAs.
-#' @param covariates Character vector of covariate column names to include in the
-#'   design matrix (x). The design matrix includes an intercept by default.
-#' @param subject_id_var Column name in phenotype file containing sample IDs that
-#'   match count matrix column names.
-#' @param n_cores Number of CPU cores passed to \code{PQLseq2::pqlseq2()} (\code{ncores}).
-#' @param keep_only_converged Logical; if TRUE and a \code{converged} column exists,
-#'   keep only \code{converged == TRUE}.
-#' @param filter_in_pqlseq2 Logical; passed to \code{PQLseq2::pqlseq2(filter=...)}.
-#' @param check_K Logical; passed to \code{PQLseq2::pqlseq2(check_K=...)}.
-#' @param verbose Logical; passed to \code{PQLseq2::pqlseq2(verbose=...)}.
+#' @param prep List output from \code{\link{prepare_data}} containing MCounts and TCounts.
+#' @param predictor_var Phenotype column name for predictor.
+#' @param covariates Character vector of covariate column names.
+#' @param subject_id_var Phenotype column with sample IDs matching count columns.
+#' @param output_file Output path for results.
+#' @param keep_only_converged Logical; if TRUE (default) return only converged sites.
+#' @param kinship_file Optional path to a tab-delimited square kinship matrix.
+#'   If NULL (default), an identity matrix is used.
 #'
-#' @return A data.frame containing \code{chr}, \code{start}, and PQLseq2 output columns
-#'   (optionally converged-only), sorted by ascending p-value when present.
-#'
-#' @examples
-#' \dontrun{
-#' res <- run_pqlseq(
-#'   pheno_file = "pheno.filtered.csv",
-#'   prep = prep,
-#'   kinship_file = NULL,
-#'   predictor_var = "EtOH_6m",
-#'   covariates = c("Cohort","Age"),
-#'   subject_id_var = "MATRR_ID",
-#'   n_cores = 8,
-#'   output_file = "PQLseq2_results.txt"
-#' )
-#' }
-#'
+#' @return A data.frame of results (also written to disk).
 #' @export
 run_pqlseq <- function(
     pheno_file,
-    prep = NULL,
-    kinship_file = NULL,
-    mcounts_file = "MCounts.txt",
-    tcounts_file = "TCounts.txt",
-    output_file = "PQLseq2_Results.txt",
+    prep,
     predictor_var,
-    covariates = c("Cohort", "Age"),
-    subject_id_var = "subject_id",
-    n_cores = 4,
+    covariates,
+    subject_id_var,
+    output_file = "PQLseq2_Results.txt",
     keep_only_converged = TRUE,
-    filter_in_pqlseq2 = TRUE,
-    check_K = FALSE,
-    verbose = FALSE
+    kinship_file = NULL
 ) {
-  #dependencies
-  if (!requireNamespace("data.table", quietly = TRUE)) {
-    stop("Package 'data.table' is required for run_pqlseq().")
-  }
-  if (!requireNamespace("PQLseq2", quietly = TRUE)) {
-    stop("Package 'PQLseq2' is required for run_pqlseq().")
-  }
+
+  if (!requireNamespace("PQLseq2", quietly = TRUE))
+    stop("Package 'PQLseq2' is required.")
+
 
   #read phenotype
-  pheno <- utils::read.csv(pheno_file, header = TRUE)
-  if (!(subject_id_var %in% names(pheno))) {
-    stop("subject_id_var not found in phenotype file: ", subject_id_var)
-  }
-  if (!(predictor_var %in% names(pheno))) {
-    stop("predictor_var not found in phenotype file: ", predictor_var)
-  }
+  pheno <- utils::read.csv(pheno_file, stringsAsFactors = FALSE)
+
+  if (!subject_id_var %in% names(pheno))
+    stop("subject_id_var not found in phenotype.")
+
+  if (!predictor_var %in% names(pheno))
+    stop("predictor_var not found in phenotype.")
+
+  missing_cov <- setdiff(covariates, names(pheno))
+  if (length(missing_cov) > 0)
+    stop("Missing covariates: ", paste(missing_cov, collapse = ", "))
+
   pheno[[subject_id_var]] <- as.character(pheno[[subject_id_var]])
 
-  #load counts from prep or files
-  if (!is.null(prep)) {
-    MC_all <- as.data.frame(prep$MCounts)
-    TC_all <- as.data.frame(prep$TCounts)
-  } else {
-    MC_all <- as.data.frame(data.table::fread(mcounts_file))
-    TC_all <- as.data.frame(data.table::fread(tcounts_file))
-  }
-
-  #expect chr/start columns in MCounts
-  if (!all(c("chr", "start") %in% names(MC_all))) {
-    stop("MCounts must contain columns 'chr' and 'start'.")
-  }
-  coords <- MC_all[, c("chr", "start")]
-  MC <- MC_all[, !(names(MC_all) %in% c("chr", "start")), drop = FALSE]
-  TC <- TC_all[, !(names(TC_all) %in% c("chr", "start")), drop = FALSE]
-
-  #align phenotype samples to count columns
-  sample_order <- pheno[[subject_id_var]]
-  valid <- sample_order %in% colnames(MC)
-  if (!all(valid)) {
-    warning("Dropping phenotype samples without counts: ", paste(sample_order[!valid], collapse = ", "))
-  }
-  pheno <- pheno[valid, , drop = FALSE]
-  sample_order <- pheno[[subject_id_var]]
-
-  MC <- MC[, sample_order, drop = FALSE]
-  TC <- TC[, sample_order, drop = FALSE]
-
-
-  W_vec <- pheno[[predictor_var]]
-  if (is.factor(W_vec)) W_vec <- as.character(W_vec)
-  W_vec <- as.numeric(W_vec)
-  if (anyNA(W_vec)) {
-    stop("Predictor could not be coerced to numeric without NA. Check predictor_var: ", predictor_var)
-  }
-  W <- matrix(W_vec, ncol = 1)
-
-  #make sure covariates exist
-  missing_cov <- setdiff(covariates, names(pheno))
-  if (length(missing_cov) > 0) {
-    stop("These covariate columns are missing in phenotype: ", paste(missing_cov, collapse = ", "))
-  }
-
+  #auto-factor numeric-coded categorical covariates
   for (cv in covariates) {
-    if (is.character(pheno[[cv]])) pheno[[cv]] <- as.factor(pheno[[cv]])
+    if (is.numeric(pheno[[cv]]) || is.integer(pheno[[cv]])) {
+      u <- unique(pheno[[cv]][!is.na(pheno[[cv]])])
+      if (length(u) > 1 && length(u) <= 10) {
+        pheno[[cv]] <- as.factor(pheno[[cv]])
+        message("Treating numeric covariate as factor: ", cv,
+                " (", length(u), " levels: ", paste(sort(u), collapse = ", "), ")")
+      }
+    }
+    if (is.character(pheno[[cv]]))
+      pheno[[cv]] <- as.factor(pheno[[cv]])
   }
 
-  #build design matrix (x) with intercept
-  x_formula <- stats::as.formula(paste("~", paste(covariates, collapse = " + ")))
-  x <- stats::model.matrix(x_formula, data = pheno)
 
-  #kinship matrix (K)
+  if (is.null(prep$MCounts) || is.null(prep$TCounts))
+    stop("prep must contain $MCounts and $TCounts.")
+
+  MC_all <- as.data.frame(prep$MCounts, check.names = FALSE)
+  TC_all <- as.data.frame(prep$TCounts, check.names = FALSE)
+
+  if (!all(c("chr", "start") %in% names(MC_all)))
+    stop("prep$MCounts must include 'chr' and 'start'.")
+
+  if (!all(c("chr", "start") %in% names(TC_all)))
+    stop("prep$TCounts must include 'chr' and 'start'.")
+
+  coords <- MC_all[, c("chr","start"), drop = FALSE]
+  MC <- MC_all[, setdiff(names(MC_all), c("chr","start")), drop = FALSE]
+  TC <- TC_all[, setdiff(names(TC_all), c("chr","start")), drop = FALSE]
+
+  if (!identical(colnames(MC), colnames(TC)))
+    stop("MCounts and TCounts sample columns do not match.")
+
+
+  keep <- pheno[[subject_id_var]] %in% colnames(MC)
+
+  if (!all(keep)) {
+    warning("Dropping phenotype samples without counts: ",
+            paste(pheno[[subject_id_var]][!keep], collapse = ", "))
+  }
+
+  pheno <- pheno[keep, , drop = FALSE]
+  sample_ids <- pheno[[subject_id_var]]
+
+  MC <- MC[, sample_ids, drop = FALSE]
+  TC <- TC[, sample_ids, drop = FALSE]
+
+
+  x <- as.numeric(pheno[[predictor_var]])
+  if (anyNA(x))
+    stop("Predictor contains NA after coercion.")
+  x <- matrix(x, ncol = 1)
+
+  W <- stats::model.matrix(
+    stats::as.formula(paste("~", paste(covariates, collapse="+"))),
+    data = pheno
+  )
+
+
+  n <- nrow(pheno)
+
   if (is.null(kinship_file)) {
-    kin <- diag(nrow(pheno))
+    K <- diag(n)
   } else {
-    kin <- utils::read.table(kinship_file, header = TRUE, check.names = FALSE)
-    kin <- as.matrix(kin)
+
+    kin_df <- utils::read.table(kinship_file, header = TRUE, check.names = FALSE, sep = "\t")
+    kin_mat <- as.matrix(kin_df)
+
+
+    if (!is.numeric(kin_mat[1,1]) && ncol(kin_mat) > 1) {
+      rn <- kin_mat[,1]
+      kin_mat <- kin_mat[,-1, drop = FALSE]
+      rownames(kin_mat) <- rn
+    }
+
+    storage.mode(kin_mat) <- "numeric"
+
+
+    if (!is.null(rownames(kin_mat)) && !is.null(colnames(kin_mat)) &&
+        all(sample_ids %in% rownames(kin_mat)) && all(sample_ids %in% colnames(kin_mat))) {
+      kin_mat <- kin_mat[sample_ids, sample_ids, drop = FALSE]
+    }
+
+    if (!all(dim(kin_mat) == c(n, n)))
+      stop("Kinship matrix must be ", n, " x ", n,
+           " after alignment. Got: ", paste(dim(kin_mat), collapse=" x "))
+
+    K <- kin_mat
   }
 
-  #convert counts to numeric matrices
-  Y <- as.matrix(MC)
-  lib_size <- as.matrix(TC)
 
-  if (nrow(x) != nrow(W)) stop("Design matrix x and W have mismatched rows.")
-  if (nrow(kin) != nrow(W) || ncol(kin) != nrow(W)) stop("Kinship matrix K dimensions do not match samples.")
-  if (ncol(Y) != nrow(W)) stop("Y columns do not match number of samples.")
-  if (ncol(lib_size) != nrow(W)) stop("lib_size columns do not match number of samples.")
+  Y <- as.matrix(MC); storage.mode(Y) <- "numeric"
+  Tmat <- as.matrix(TC); storage.mode(Tmat) <- "numeric"
 
-  tmp_out <- tempfile(pattern = "pqlseq2_", fileext = ".txt")
+  if (any(Tmat < Y, na.rm = TRUE))
+    stop("Some trials < successes.")
 
-  #fir model
+
+  nonboundary <- (Tmat > 0) & (Y > 0) & (Y < Tmat)
+  keep_sites <- rowSums(nonboundary) >= max(6, ceiling(ncol(Y)/2))
+
+  Y <- Y[keep_sites, , drop = FALSE]
+  Tmat <- Tmat[keep_sites, , drop = FALSE]
+  coords <- coords[keep_sites, , drop = FALSE]
+
+  message("Stability filter kept ", nrow(Y), " sites.")
+  if (nrow(Y) == 0)
+    stop("No sites remain after stability filtering.")
+
+
   fit <- PQLseq2::pqlseq2(
     Y = Y,
     x = x,
-    K = kin,
+    K = K,
     W = W,
-    lib_size = lib_size,
+    lib_size = Tmat,
     model = "BMM",
-    ncores = n_cores,
-    filter = filter_in_pqlseq2,
-    check_K = check_K,
-    outfile = tmp_out,
-    verbose = verbose
+    ncores = 1,
+    filter = FALSE,
+    verbose = FALSE
   )
 
-  if (file.exists(tmp_out)) unlink(tmp_out)
+  res <- cbind(coords, as.data.frame(fit, stringsAsFactors = FALSE))
+  rownames(res) <- NULL
 
-  fit <- as.data.frame(fit)
 
-  #attach coords
-  df <- cbind(coords, fit)
-
-  #keep converged only
-  if (keep_only_converged && "converged" %in% names(df)) {
-    df <- df[df$converged == TRUE, , drop = FALSE]
+  if (keep_only_converged && "converged" %in% names(res)) {
+    res$converged <- as.logical(res$converged)
+    res <- res[res$converged == TRUE, , drop = FALSE]
+    rownames(res) <- NULL
   }
 
-  #sort by pvalue if present
-  if ("pvalue" %in% names(df)) {
-    df$pvalue <- as.numeric(as.character(df$pvalue))
-    df <- df[order(df$pvalue), , drop = FALSE]
+
+  if ("pvalue" %in% names(res)) {
+    res$pvalue <- suppressWarnings(as.numeric(res$pvalue))
+    res <- res[order(res$pvalue), , drop = FALSE]
+    rownames(res) <- NULL
   }
 
-  #write final output
-  utils::write.table(df, output_file, sep = "\t", quote = FALSE, row.names = FALSE)
-
-  df
+  utils::write.table(res, output_file, sep="\t", quote=FALSE, row.names=FALSE)
+  res
 }
-

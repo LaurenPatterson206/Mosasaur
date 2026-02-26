@@ -1,70 +1,60 @@
-#' Run comb-p on converged PQLseq2 site-level results
+#' Identify DMRs with ENmix::combp() from PQLseq2 site-level results
 #'
-#' Formats site-level results (DMCs) into the input required by \code{ENmix::combp()}
-#' and identifies spatially correlated differentially methylated regions (DMRs).
+#' ENmix::combp() prints results and writes region-level DMRs to a file named
+#' "resu_combp.csv" in the current working directory, but it does not return an
+#' object (it returns NULL). This wrapper runs combp in a controlled output
+#' directory, then reads "resu_combp.csv" back into R and returns it.
 #'
-#' On Windows, \code{nCores > 1} is not supported by \code{mclapply}; this function
-#' automatically sets \code{nCores = 1} and warns.
+#' @param pqlseq_results Either:
+#'   (1) a data.frame containing columns chr, start, pvalue (and optionally converged), or
+#'   (2) a path to a tab-delimited file readable by data.table::fread().
+#' @param prefix Filename prefix for outputs (default "combp").
+#' @param dist_cutoff Maximum distance (bp) to merge nearby significant sites into regions.
+#' @param bin_size Bin size (bp) used for autocorrelation calculation.
+#' @param seed FDR threshold used by combp to seed candidate regions (typical 0.05 or 0.01).
+#' @param keep_converged_only If TRUE (default), and a converged column exists, keep only converged == TRUE.
+#' @param n_cores Number of cores (Windows is forced to 1 because combp uses mclapply).
 #'
-#' If \code{write_output = TRUE}, writes:
-#' \itemize{
-#'   \item \code{<prefix>.combp.bed} (region-level results)
-#'   \item \code{<prefix>.combp.sites.bed} (site-level results returned by combp)
-#'   \item \code{<prefix>.combp.input.bed} (formatted input to combp)
-#' }
-#'
-#' @param pqlseq_results Either a filepath (tab-delimited) or a data.frame containing
-#'   at least \code{chr}, \code{start}, and \code{pvalue}.
-#' @param dist_cutoff Maximum distance (bp) allowed between adjacent sites when forming regions.
-#' @param bin_size Bin size (bp) used for the Stouffer-Liptak-Kechris correction.
-#' @param seed Seed p-value threshold for candidate regions.
-#' @param nCores Number of cores. Windows: forced to 1.
-#' @param write_output Logical; if TRUE, write output files.
-#' @param outfile_prefix Prefix for output files.
-#' @param require_converged Logical; if TRUE and \code{converged} exists, keep only TRUE.
-#'   If \code{sigma2} exists, keep only \code{sigma2 > 0}.
-#'
-#' @return The object returned by \code{ENmix::combp()}, typically a list with
-#'   \code{regions} and \code{data}.
+#' @return A list with:
+#'   \itemize{
+#'     \item regions: data.frame of DMRs read from resu_combp.csv (may be empty)
+#'     \item input_bed: the combp input bed used (chr, start, end, p, probe)
+#'     \item out_dir: the directory containing outputs
+#'     \item regions_file: the written regions csv path
+#'   }
 #'
 #' @examples
 #' \dontrun{
-#' combp_res <- run_combp(
-#'   pqlseq_results = "PQLseq2_EtOH6m_methyl_vs_unmod.txt",
-#'   dist_cutoff = 1000,
-#'   bin_size = 50,
-#'   seed = 0.05,
-#'   nCores = 1,
-#'   outfile_prefix = "EtOH6m_combP"
-#' )
-#' dmrs <- as.data.frame(combp_res$regions)
+#' combp_out <- run_combp(res, prefix="EtOH6m_ModVsUnmod", dist_cutoff=1000, bin_size=50, seed=0.05)
+#' combp_out$regions
 #' }
 #'
 #' @export
 run_combp <- function(
     pqlseq_results,
-    dist_cutoff = 500,
+    prefix = "combp",
+    dist_cutoff = 1000,
     bin_size = 50,
     seed = 0.05,
-    nCores = parallel::detectCores(),
-    write_output = TRUE,
-    outfile_prefix = "combp_results",
-    require_converged = TRUE
+    keep_converged_only = TRUE,
+    n_cores = 1
 ) {
   if (!requireNamespace("ENmix", quietly = TRUE)) {
-    stop("Package 'ENmix' is required for run_combp(). Install with BiocManager::install('ENmix').")
+    stop("Package 'ENmix' is required. Install with BiocManager::install('ENmix').")
   }
   if (!requireNamespace("data.table", quietly = TRUE)) {
-    stop("Package 'data.table' is required for run_combp().")
+    stop("Package 'data.table' is required.")
   }
 
-  if (.Platform$OS.type == "windows" && nCores > 1) {
-    warning("Windows does not support mclapply; setting nCores = 1 for combp.")
-    nCores <- 1
+  # Windows safety: ENmix combp uses mclapply internally
+  if (.Platform$OS.type == "windows" && n_cores > 1) {
+    warning("Windows detected: setting n_cores = 1 (combp uses mclapply).")
+    n_cores <- 1
   }
 
+  # Read input
+  df0 <- NULL
   if (is.character(pqlseq_results) && length(pqlseq_results) == 1) {
-    message("Reading PQLseq results...")
     df0 <- as.data.frame(data.table::fread(pqlseq_results))
   } else {
     df0 <- as.data.frame(pqlseq_results)
@@ -73,50 +63,88 @@ run_combp <- function(
   req <- c("chr", "start", "pvalue")
   miss <- setdiff(req, names(df0))
   if (length(miss) > 0) {
-    stop("PQLseq results missing required columns: ", paste(miss, collapse = ", "))
+    stop("Missing required columns: ", paste(miss, collapse = ", "),
+         "\nNeed at least: chr, start, pvalue.")
   }
 
   df <- df0
-  if (require_converged && "converged" %in% names(df)) {
+
+
+  if (isTRUE(keep_converged_only) && "converged" %in% names(df)) {
     df <- df[df$converged == TRUE, , drop = FALSE]
   }
-  if ("sigma2" %in% names(df)) {
-    df <- df[df$sigma2 > 0, , drop = FALSE]
-  }
+
 
   df$chr <- as.character(df$chr)
-  df$start <- as.numeric(as.character(df$start))
-  df$pvalue <- as.numeric(as.character(df$pvalue))
+  df$start <- suppressWarnings(as.numeric(df$start))
+  df$pvalue <- suppressWarnings(as.numeric(df$pvalue))
+  df <- df[!is.na(df$start) & !is.na(df$pvalue), , drop = FALSE]
 
-  df$end <- df$start + 1
-  bed <- df[, c("chr", "start", "end", "pvalue")]
+  if (nrow(df) < 2) {
+    stop("Too few sites after filtering to run combp (need >= 2).")
+  }
+
+  # ENmix wants columns: chr, start, end, p, probe
+  bed <- data.frame(
+    chr   = df$chr,
+    start = df$start,
+    end   = df$start,
+    p     = df$pvalue,
+    probe = paste0(df$chr, ":", df$start),
+    stringsAsFactors = FALSE
+  )
   bed <- bed[order(bed$chr, bed$start), , drop = FALSE]
-  bed$Probe <- paste0("chr", bed$chr, ":", bed$start, "-", bed$end)
 
-  message("Running combp...")
-  combp_res <- ENmix::combp(
-    bed,
+  message("Running combp on ", nrow(bed), " sites...")
+
+
+  out_dir <- file.path(getwd(), paste0(prefix, "_combp"))
+  if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE)
+
+  old_wd <- getwd()
+  on.exit(setwd(old_wd), add = TRUE)
+  setwd(out_dir)
+
+
+  if (file.exists("resu_combp.csv")) file.remove("resu_combp.csv")
+
+
+  ENmix::combp(
+    data = bed,
     dist.cutoff = dist_cutoff,
     bin.size = bin_size,
     seed = seed,
     region_plot = FALSE,
     mht_plot = FALSE,
-    nCores = nCores,
+    nCores = n_cores,
     verbose = TRUE
   )
 
-  if (write_output) {
-    message("Writing combp output...")
-
-    regions_df <- tryCatch(as.data.frame(combp_res$regions), error = function(e) data.frame())
-    sites_df <- tryCatch(as.data.frame(combp_res$data), error = function(e) data.frame())
-
-    data.table::fwrite(regions_df, paste0(outfile_prefix, ".combp.bed"), sep = "\t", quote = FALSE)
-    data.table::fwrite(sites_df, paste0(outfile_prefix, ".combp.sites.bed"), sep = "\t", quote = FALSE)
-    data.table::fwrite(bed, paste0(outfile_prefix, ".combp.input.bed"), sep = "\t", quote = FALSE)
+  regions_file <- file.path(out_dir, "resu_combp.csv")
+  if (!file.exists(regions_file)) {
+    stop("combp finished but did not create resu_combp.csv in: ", out_dir,
+         "\nThis usually indicates an ENmix/working-directory issue.")
   }
 
-  message("combp finished.")
-  combp_res
-}
+  regions <- tryCatch(
+    utils::read.csv(regions_file, stringsAsFactors = FALSE),
+    error = function(e) data.frame()
+  )
 
+
+  input_file <- file.path(out_dir, paste0(prefix, ".combp.input.bed"))
+  data.table::fwrite(bed, input_file, sep = "\t")
+
+
+  friendly_regions_file <- file.path(out_dir, paste0(prefix, ".combp.regions.csv"))
+  file.copy(regions_file, friendly_regions_file, overwrite = TRUE)
+
+  message("combp done. Regions file: ", friendly_regions_file)
+
+  list(
+    regions = regions,
+    input_bed = bed,
+    out_dir = out_dir,
+    regions_file = friendly_regions_file
+  )
+}

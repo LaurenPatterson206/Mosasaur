@@ -2,56 +2,42 @@
 % Please edit documentation in R/prepare_data.R
 \name{prepare_data}
 \alias{prepare_data}
-\title{Prepare count matrices for PQLseq2 based on a chosen comparison}
+\title{Prepare count matrices for PQLseq2 from merged bedMethyl data}
 \usage{
 prepare_data(
   filtered,
   compare = c("modified_vs_unmodified", "methyl_vs_unmodified", "hydroxy_vs_unmodified"),
-  write_outputs = TRUE,
-  prefix = "PQLseq2",
+  add_pseudocounts = FALSE,
+  success_pseudocount = 1,
+  trial_pseudocount = 0,
   strip_sample_prefix_regex = NULL,
-  warn_on_mismatch = TRUE
+  write_outputs = TRUE,
+  prefix = "PQLseq2"
 )
 }
 \arguments{
-\item{filtered}{A data.frame typically output from \code{\link{filter_data}}.
-Must contain \code{Coord} formatted as "chr:start-end" and count columns
-beginning with Methyl_, Hydroxymethyl_, and Unmethyl_.}
+\item{filtered}{A data.frame containing a \code{Coord} column ("chr:start-end")
+and count columns with prefixes: \code{Methyl_}, \code{Hydroxymethyl_}, \code{Unmethyl_}.}
 
-\item{compare}{Which comparison mode to prepare.}
+\item{compare}{One of \code{"modified_vs_unmodified"}, \code{"methyl_vs_unmodified"},
+\code{"hydroxy_vs_unmodified"}.}
 
-\item{write_outputs}{Logical; if TRUE, writes \verb{<prefix>_MCounts.txt} and
-\verb{<prefix>_TCounts.txt}.}
+\item{add_pseudocounts}{Logical; if TRUE adds pseudocounts (not recommended for PQLseq2).}
 
-\item{prefix}{Output filename prefix.}
+\item{success_pseudocount}{Added to successes if \code{add_pseudocounts=TRUE}.}
 
-\item{strip_sample_prefix_regex}{Optional regex to strip from sample column
-names (e.g. "^SSS").}
+\item{trial_pseudocount}{Added to trials if \code{add_pseudocounts=TRUE}.}
 
-\item{warn_on_mismatch}{Logical; if TRUE, warns when upstream filter criteria
-suggest a different comparison than \code{compare}.}
+\item{strip_sample_prefix_regex}{Optional regex applied to sample names (e.g. \code{"^SS"}).}
+
+\item{write_outputs}{Logical; if TRUE writes \code{<prefix>_MCounts.txt} and \code{<prefix>_TCounts.txt}.}
+
+\item{prefix}{Output prefix.}
 }
 \value{
-A list containing MCounts, TCounts, compare mode, and output filenames.
+A list with \code{MCounts}, \code{TCounts}, and metadata.
 }
 \description{
-Constructs successes (MCounts) and trials (TCounts) matrices for binomial mixed
-modeling using PQLseq2. The constructed matrices depend on the selected
-comparison mode.
-}
-\details{
-Supported comparison modes:
-\itemize{
-\item \code{"modified_vs_unmodified"}: (methyl + hydroxy) vs unmethyl
-\item \code{"methyl_vs_unmodified"}: methyl vs unmethyl
-\item \code{"hydroxy_vs_unmodified"}: hydroxy vs unmethyl
-}
-}
-\examples{
-\dontrun{
-prep <- prepare_data(filtered, compare = "methyl_vs_unmodified",
-                     prefix = "EtOH6m_methyl_vs_unmod",
-                     strip_sample_prefix_regex = "^SSS")
-}
-
+Builds success (MCounts) and trial (TCounts) matrices for PQLseq2.
+By default, returns raw counts without pseudocounts (recommended for modeling).
 }

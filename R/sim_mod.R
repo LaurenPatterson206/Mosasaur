@@ -7,7 +7,7 @@
 #' @param n_controls Number of control samples.
 #' @param n_cases Number of case samples.
 #' @param n_cpg Number of CpG sites.
-#' @param m Total count (coverage) per CpG site per sample.
+#' @param m Total count (or coverage) per CpG site per sample.
 #' @param alpha Numeric vector of length \code{d} (Dirichlet parameters) for controls.
 #' @param delta Numeric vector of length \code{d} (effect shift added to \code{alpha} in cases).
 #' @param d Number of categories (defaults to 3: methylated, unmodified, hydroxymethylated).

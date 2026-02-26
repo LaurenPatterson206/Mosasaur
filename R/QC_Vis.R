@@ -67,7 +67,9 @@ QC_Vis <- function(
   )
 
   make_plot <- function(df, var, xlab) {
-    p <- ggplot2::ggplot(df, ggplot2::aes(x = rlang::.data[[var]]))
+    var_sym <- rlang::sym(var)
+
+    p <- ggplot2::ggplot(df, ggplot2::aes(x = !!var_sym))
 
     if (plot_type %in% c("hist", "both")) {
       p <- p + ggplot2::geom_histogram(

@@ -69,11 +69,6 @@ across a coverage grid.
 }
 }
 \details{
-Power is defined as the fraction of truly affected CpGs detected at significance
-threshold \code{alpha}. When using empirical data, “truth” is defined by the
-simulation effect you specify (i.e., power is evaluated under a user-defined effect
-size calibrated to real baseline rates).
-
 Test model: for each CpG site, a quasibinomial GLM is fit:
 \preformatted{
 cbind(modified, total - modified) ~ group

@@ -2,90 +2,45 @@
 % Please edit documentation in R/run_pqlseq.R
 \name{run_pqlseq}
 \alias{run_pqlseq}
-\title{Run PQLseq2 on prepared count matrices (beta-binomial mixed model)}
+\title{Run PQLseq2}
 \usage{
 run_pqlseq(
   pheno_file,
-  prep = NULL,
-  kinship_file = NULL,
-  mcounts_file = "MCounts.txt",
-  tcounts_file = "TCounts.txt",
-  output_file = "PQLseq2_Results.txt",
+  prep,
   predictor_var,
-  covariates = c("Cohort", "Age"),
-  subject_id_var = "subject_id",
-  n_cores = 4,
+  covariates,
+  subject_id_var,
+  output_file = "PQLseq2_Results.txt",
   keep_only_converged = TRUE,
-  filter_in_pqlseq2 = TRUE,
-  check_K = FALSE,
-  verbose = FALSE
+  kinship_file = NULL
 )
 }
 \arguments{
 \item{pheno_file}{Path to a CSV phenotype file.}
 
-\item{prep}{Optional list output from \code{\link{prepare_data}} containing
-\code{MCounts} and \code{TCounts}. If provided, \code{mcounts_file} and
-\code{tcounts_file} are ignored.}
+\item{prep}{List output from \code{\link{prepare_data}} containing MCounts and TCounts.}
 
-\item{kinship_file}{Optional path to a kinship matrix file (tab-delimited, square).
-If \code{NULL}, an identity matrix is used.}
+\item{predictor_var}{Phenotype column name for predictor.}
 
-\item{mcounts_file}{Path to an MCounts file (ignored if \code{prep} provided).}
+\item{covariates}{Character vector of covariate column names.}
 
-\item{tcounts_file}{Path to a TCounts file (ignored if \code{prep} provided).}
+\item{subject_id_var}{Phenotype column with sample IDs matching count columns.}
 
-\item{output_file}{Path to write tab-delimited PQLseq2 results.}
+\item{output_file}{Output path for results.}
 
-\item{predictor_var}{Column name in phenotype file used as predictor (W).
-Must be numeric or coercible to numeric without introducing NAs.}
+\item{keep_only_converged}{Logical; if TRUE (default) return only converged sites.}
 
-\item{covariates}{Character vector of covariate column names to include in the
-design matrix (x). The design matrix includes an intercept by default.}
-
-\item{subject_id_var}{Column name in phenotype file containing sample IDs that
-match count matrix column names.}
-
-\item{n_cores}{Number of CPU cores passed to \code{PQLseq2::pqlseq2()} (\code{ncores}).}
-
-\item{keep_only_converged}{Logical; if TRUE and a \code{converged} column exists,
-keep only \code{converged == TRUE}.}
-
-\item{filter_in_pqlseq2}{Logical; passed to \code{PQLseq2::pqlseq2(filter=...)}.}
-
-\item{check_K}{Logical; passed to \code{PQLseq2::pqlseq2(check_K=...)}.}
-
-\item{verbose}{Logical; passed to \code{PQLseq2::pqlseq2(verbose=...)}.}
+\item{kinship_file}{Optional path to a tab-delimited square kinship matrix.
+If NULL (default), an identity matrix is used.}
 }
 \value{
-A data.frame containing \code{chr}, \code{start}, and PQLseq2 output columns
-(optionally converged-only), sorted by ascending p-value when present.
+A data.frame of results (also written to disk).
 }
 \description{
-Fits a beta-binomial mixed model at each CpG site using \code{PQLseq2::pqlseq2()},
-supporting arbitrary predictors and covariates with an optional kinship matrix.
-If no kinship matrix is provided, an identity matrix is used. Results are
-filtered to keep only \code{converged == TRUE} (if present).
+Runs \code{PQLseq2::pqlseq2()} for a binomial mixed model using count matrices
+from \code{\link{prepare_data}} and a phenotype CSV.
 }
 \details{
-This function can take either:
-\itemize{
-\item \code{prep}: the list output of \code{\link{prepare_data}} (preferred)
-\item or file paths \code{mcounts_file} and \code{tcounts_file}
-}
-}
-\examples{
-\dontrun{
-res <- run_pqlseq(
-  pheno_file = "pheno.filtered.csv",
-  prep = prep,
-  kinship_file = NULL,
-  predictor_var = "EtOH_6m",
-  covariates = c("Cohort","Age"),
-  subject_id_var = "MATRR_ID",
-  n_cores = 8,
-  output_file = "PQLseq2_results.txt"
-)
-}
-
+Designed to be stable for small cohorts by automatically filtering
+problematic sites and preventing known PQLseq2 crashes.
 }

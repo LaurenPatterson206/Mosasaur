@@ -2,68 +2,54 @@
 % Please edit documentation in R/run_combp.R
 \name{run_combp}
 \alias{run_combp}
-\title{Run comb-p on converged PQLseq2 site-level results}
+\title{Identify DMRs with ENmix::combp() from PQLseq2 site-level results}
 \usage{
 run_combp(
   pqlseq_results,
-  dist_cutoff = 500,
-  bin_size = 50,
-  seed = 0.05,
-  nCores = parallel::detectCores(),
-  write_output = TRUE,
-  outfile_prefix = "combp_results",
-  require_converged = TRUE
-)
-}
-\arguments{
-\item{pqlseq_results}{Either a filepath (tab-delimited) or a data.frame containing
-at least \code{chr}, \code{start}, and \code{pvalue}.}
-
-\item{dist_cutoff}{Maximum distance (bp) allowed between adjacent sites when forming regions.}
-
-\item{bin_size}{Bin size (bp) used for the Stouffer-Liptak-Kechris correction.}
-
-\item{seed}{Seed p-value threshold for candidate regions.}
-
-\item{nCores}{Number of cores. Windows: forced to 1.}
-
-\item{write_output}{Logical; if TRUE, write output files.}
-
-\item{outfile_prefix}{Prefix for output files.}
-
-\item{require_converged}{Logical; if TRUE and \code{converged} exists, keep only TRUE.
-If \code{sigma2} exists, keep only \code{sigma2 > 0}.}
-}
-\value{
-The object returned by \code{ENmix::combp()}, typically a list with
-\code{regions} and \code{data}.
-}
-\description{
-Formats site-level results (DMCs) into the input required by \code{ENmix::combp()}
-and identifies spatially correlated differentially methylated regions (DMRs).
-}
-\details{
-On Windows, \code{nCores > 1} is not supported by \code{mclapply}; this function
-automatically sets \code{nCores = 1} and warns.
-
-If \code{write_output = TRUE}, writes:
-\itemize{
-\item \code{<prefix>.combp.bed} (region-level results)
-\item \code{<prefix>.combp.sites.bed} (site-level results returned by combp)
-\item \code{<prefix>.combp.input.bed} (formatted input to combp)
-}
-}
-\examples{
-\dontrun{
-combp_res <- run_combp(
-  pqlseq_results = "PQLseq2_EtOH6m_methyl_vs_unmod.txt",
+  prefix = "combp",
   dist_cutoff = 1000,
   bin_size = 50,
   seed = 0.05,
-  nCores = 1,
-  outfile_prefix = "EtOH6m_combP"
+  keep_converged_only = TRUE,
+  n_cores = 1
 )
-dmrs <- as.data.frame(combp_res$regions)
+}
+\arguments{
+\item{pqlseq_results}{Either:
+(1) a data.frame containing columns chr, start, pvalue (and optionally converged), or
+(2) a path to a tab-delimited file readable by data.table::fread().}
+
+\item{prefix}{Filename prefix for outputs (default "combp").}
+
+\item{dist_cutoff}{Maximum distance (bp) to merge nearby significant sites into regions.}
+
+\item{bin_size}{Bin size (bp) used for autocorrelation calculation.}
+
+\item{seed}{FDR threshold used by combp to seed candidate regions (typical 0.05 or 0.01).}
+
+\item{keep_converged_only}{If TRUE (default), and a converged column exists, keep only converged == TRUE.}
+
+\item{n_cores}{Number of cores (Windows is forced to 1 because combp uses mclapply).}
+}
+\value{
+A list with:
+\itemize{
+\item regions: data.frame of DMRs read from resu_combp.csv (may be empty)
+\item input_bed: the combp input bed used (chr, start, end, p, probe)
+\item out_dir: the directory containing outputs
+\item regions_file: the written regions csv path
+}
+}
+\description{
+ENmix::combp() prints results and writes region-level DMRs to a file named
+"resu_combp.csv" in the current working directory, but it does not return an
+object (it returns NULL). This wrapper runs combp in a controlled output
+directory, then reads "resu_combp.csv" back into R and returns it.
+}
+\examples{
+\dontrun{
+combp_out <- run_combp(res, prefix="EtOH6m_ModVsUnmod", dist_cutoff=1000, bin_size=50, seed=0.05)
+combp_out$regions
 }
 
 }

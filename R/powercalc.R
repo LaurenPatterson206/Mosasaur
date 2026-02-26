@@ -8,11 +8,6 @@
 #'         across a coverage grid.
 #' }
 #'
-#' Power is defined as the fraction of truly affected CpGs detected at significance
-#' threshold \code{alpha}. When using empirical data, “truth” is defined by the
-#' simulation effect you specify (i.e., power is evaluated under a user-defined effect
-#' size calibrated to real baseline rates).
-#'
 #' @param sim_data Optional data.frame produced by \code{\link{sim_mod}}.
 #' @param filtered_data Optional filtered Mosasaur table (wide format) containing
 #'   \code{Methyl_}, \code{Unmethyl_}, and optionally \code{Hydroxymethyl_} columns.
@@ -157,7 +152,7 @@ power_calc <- function(
       hyd_cols <- ".__hydroxy0"
     }
 
-    # Align sample IDs
+    #align sample IDs
     ids_m <- sub("^Methyl_", "", meth_cols)
     ids_u <- sub("^Unmethyl_", "", unm_cols)
     common <- intersect(ids_m, ids_u)
