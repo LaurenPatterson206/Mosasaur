@@ -3,7 +3,7 @@
 export(Estimate_Parameters)
 export(QC_Vis)
 export(annotate)
-export(compute_region_composition)
+export(compute_modification_composition)
 export(filter_data)
 export(merge_data)
 export(power_calc)

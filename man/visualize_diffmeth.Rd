@@ -6,7 +6,7 @@
 \usage{
 visualize_diffmeth(
   x,
-  plots = c("manhattan", "volcano"),
+  plots = c("manhattan", "volcano", "density"),
   chr_col = "chr",
   start_col = "start",
   end_col = "end",
@@ -22,39 +22,90 @@ visualize_diffmeth(
 )
 }
 \arguments{
-\item{x}{A data.frame of results. Must include \code{chr} and \code{start}
-(and \code{end} for region-length plots).}
+\item{x}{A data.frame of differential methylation results.}
 
-\item{plots}{Character vector of plot names to make. Options:
-\code{"ternary"}, \code{"len_vs_p"}, \code{"p_along_genome"},
-\code{"volcano"}, \code{"manhattan"}.}
+\item{plots}{Character vector of plot names to make.}
 
-\item{chr_col, start_col, end_col}{Column names for coordinates.}
+\item{chr_col}{Column name for chromosome.}
+
+\item{start_col}{Column name for genomic start/position.}
+
+\item{end_col}{Column name for genomic end.}
 
 \item{p_col}{Column name for p-values. If NULL, tries \code{"pvalue"} then \code{"p"}.}
 
-\item{effect_col}{Column name for effect size (volcano). If NULL, tries \code{"beta"}.}
+\item{effect_col}{Column name for effect size. If NULL, tries \code{"beta"}.}
 
-\item{color_by}{Column name used for color mapping (e.g., \code{"group"}, \code{"context"}).
-If NULL, uses \code{"group"} if present.}
+\item{color_by}{Optional column name used for color.}
 
-\item{facet_by}{Optional column name to facet by (often \code{"group"}).}
+\item{facet_by}{Optional column name used for facetting.}
 
-\item{point_alpha}{Alpha for points.}
+\item{point_alpha}{Point transparency.}
 
 \item{point_size}{Point size.}
 
-\item{highlight_p}{Optional threshold; if provided, adds a horizontal line at -log10(threshold).}
+\item{highlight_p}{Optional p-value threshold for a horizontal line.}
 
-\item{output_pdf}{Logical; if TRUE writes plots to PDF.}
+\item{output_pdf}{Logical; if TRUE, save all requested plots to a PDF.}
 
-\item{pdf_file}{Output PDF filename (if output_pdf=TRUE).}
+\item{pdf_file}{Output PDF filename.}
 }
 \value{
 A named list of ggplot objects.
 }
 \description{
 Creates one or more plots for site-level (DMC) or region-level (DMR) results.
-Supports ternary composition (if methyl/unmodified/hydroxy are present),
-volcano plots (effect vs significance), and Manhattan plots (genome-wide view).
+}
+\details{
+Supported plots:
+\itemize{
+\item \code{"volcano"}: effect size vs significance
+\item \code{"manhattan"}: genome-wide significance across chromosomes
+\item \code{"density"}: distribution of beta values
+\item \code{"ternary"}: methyl / unmodified / hydroxy composition
+\item \code{"len_vs_p"}: region length vs significance
+\item \code{"p_along_genome"}: per-chromosome significance vs position
+}
+
+For PQLseq2 site-level results, common usage is:
+\preformatted{
+plots = c("density", "volcano", "manhattan")
+}
+
+For comb-p DMR results, common usage is:
+\preformatted{
+plots = c("manhattan", "len_vs_p")
+}
+
+For ternary plots, input must already contain \code{methyl}, \code{unmodified},
+and \code{hydroxy} columns (e.g. from \code{\link{compute_modification_composition}}).
+}
+\examples{
+\dontrun{
+plots <- visualize_diffmeth(
+  x = res,
+  plots = c("density", "volcano", "manhattan"),
+  p_col = "pvalue",
+  effect_col = "beta",
+  highlight_p = 0.05
+)
+
+comp <- compute_modification_composition(
+  merged = merged,
+  dmrs = dmrs_anno,
+  pheno_file = "NHP_Blood_Samples_Modified.csv",
+  subject_id_var = "MATRR_ID",
+  group_var = "Cohort",
+  group_levels = c("10", "14"),
+  strip_sample_prefix_regex = "^SS"
+)
+
+tern <- visualize_diffmeth(
+  x = comp$dmr_data,
+  plots = "ternary",
+  color_by = "group",
+  facet_by = "group"
+)
+}
+
 }
