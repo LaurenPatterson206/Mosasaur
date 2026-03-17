@@ -2,7 +2,7 @@
 % Please edit documentation in R/visualize.R
 \name{visualize_diffmeth}
 \alias{visualize_diffmeth}
-\title{Visualize differential methylation results with selectable plot types}
+\title{Visualize differential methylation results}
 \usage{
 visualize_diffmeth(
   x,
@@ -14,82 +14,169 @@ visualize_diffmeth(
   effect_col = NULL,
   color_by = NULL,
   facet_by = NULL,
-  point_alpha = 0.6,
-  point_size = 1.6,
+  point_alpha = 0.7,
+  point_size = 1.8,
   highlight_p = NULL,
   output_pdf = FALSE,
-  pdf_file = "diffmeth_plots.pdf"
+  pdf_file = "diffmeth_plots.pdf",
+  palette = c("#1b9e77", "#d95f02", "#7570b3", "#e7298a", "#66a61e", "#e6ab02",
+    "#a6761d", "#666666"),
+  base_size = 12
 )
 }
 \arguments{
-\item{x}{A data.frame of differential methylation results.}
+\item{x}{A \code{data.frame} containing differential methylation results.
+This table should contain genomic coordinates and, depending on the plots
+requested, may also require p-values, effect sizes, or modification
+composition columns.}
 
-\item{plots}{Character vector of plot names to make.}
+\item{plots}{Character vector specifying which plots to generate. Supported
+values are:
+\itemize{
+\item \code{"volcano"}: effect size versus significance
+\item \code{"manhattan"}: genome-wide significance across chromosomes
+\item \code{"density"}: distribution of methylation beta values
+\item \code{"ternary"}: methyl / unmodified / hydroxy composition
+\item \code{"len_vs_p"}: region length versus significance
+\item \code{"p_along_genome"}: significance versus genomic position
+}}
 
-\item{chr_col}{Column name for chromosome.}
+\item{chr_col}{Character string giving the chromosome column name.
+Default is \code{"chr"}.}
 
-\item{start_col}{Column name for genomic start/position.}
+\item{start_col}{Character string giving the genomic start or position
+column name. Default is \code{"start"}.}
 
-\item{end_col}{Column name for genomic end.}
+\item{end_col}{Character string giving the genomic end column name.
+Default is \code{"end"}. Required for region-based plots such as
+\code{"len_vs_p"} and used for midpoint calculation in
+\code{"p_along_genome"} when available.}
 
-\item{p_col}{Column name for p-values. If NULL, tries \code{"pvalue"} then \code{"p"}.}
+\item{p_col}{Optional character string giving the p-value column name.
+If \code{NULL}, the function first looks for \code{"pvalue"} and then
+\code{"p"}.}
 
-\item{effect_col}{Column name for effect size. If NULL, tries \code{"beta"}.}
+\item{effect_col}{Character string giving the effect size column name.
+Default is \code{"beta"} when present. This column is required for volcano
+plots. Density plots specifically visualize the distribution of beta values.}
 
-\item{color_by}{Optional column name used for color.}
+\item{color_by}{Optional character string specifying a column used to color
+points or densities. If \code{NULL} and a column named \code{"group"} is
+present, \code{"group"} is used automatically.}
 
-\item{facet_by}{Optional column name used for facetting.}
+\item{facet_by}{Optional character string specifying a column used for
+faceting. If supplied, plots that support faceting will be split into
+panels by this variable.}
 
-\item{point_alpha}{Point transparency.}
+\item{point_alpha}{Numeric transparency value for points. Default is
+\code{0.7}.}
 
-\item{point_size}{Point size.}
+\item{point_size}{Numeric point size for scatter-based plots. Default is
+\code{1.8}.}
 
-\item{highlight_p}{Optional p-value threshold for a horizontal line.}
+\item{highlight_p}{Optional numeric p-value threshold. If supplied, a
+horizontal dashed line is drawn at \code{-log10(highlight_p)} on
+significance-based plots.}
 
-\item{output_pdf}{Logical; if TRUE, save all requested plots to a PDF.}
+\item{output_pdf}{Logical; if \code{TRUE}, all requested plots are written
+to a multi-page PDF file. Default is \code{FALSE}.}
 
-\item{pdf_file}{Output PDF filename.}
+\item{pdf_file}{Character string specifying the output PDF filename when
+\code{output_pdf = TRUE}. Default is \code{"diffmeth_plots.pdf"}.}
+
+\item{palette}{Character vector of colors used for discrete color and fill
+scales when \code{color_by} is provided. Default is a restrained,
+publication-style palette.}
+
+\item{base_size}{Numeric base font size passed to the internal publication
+theme. Default is \code{12}.}
 }
 \value{
-A named list of ggplot objects.
+A named list of \code{ggplot2} plot objects. Names correspond to the
+plot types requested in \code{plots}. For example, requesting
+\code{c("density", "volcano")} returns a list with elements
+\code{$density} and \code{$volcano}.
 }
 \description{
-Creates one or more plots for site-level (DMC) or region-level (DMR) results.
+Creates publication-ready visualizations for site-level DMCs or DMRs.
+Supported plot types include volcano, Manhattan,
+density, ternary composition, region length versus significance, and
+significance along genomic position.
 }
 \details{
-Supported plots:
+The function is designed to work with outputs from differential methylation
+workflows such as \code{\link{run_pqlseq}} for site-level testing or
+region-level testing pipelines that return genomic coordinates and p-values.
+
+Plot styling is standardized through helper functions to produce clean,
+publication-ready figures with consistent themes, axis formatting,
+and color palettes.
+
+The function converts the input to a standard \code{data.frame} and performs
+light preprocessing before plotting:
 \itemize{
-\item \code{"volcano"}: effect size vs significance
-\item \code{"manhattan"}: genome-wide significance across chromosomes
-\item \code{"density"}: distribution of beta values
-\item \code{"ternary"}: methyl / unmodified / hydroxy composition
-\item \code{"len_vs_p"}: region length vs significance
-\item \code{"p_along_genome"}: per-chromosome significance vs position
+\item chromosome values are coerced to character
+\item start and end coordinates are coerced to numeric
+\item region lengths are computed as \code{end - start} when possible
+\item p-values are transformed to \code{-log10(p)}
+\item effect sizes are coerced to numeric when present
 }
 
-For PQLseq2 site-level results, common usage is:
-\preformatted{
-plots = c("density", "volcano", "manhattan")
+Plot-specific requirements:
+\itemize{
+\item \strong{Volcano}: requires an effect column and p-values
+\item \strong{Manhattan}: requires p-values and genomic coordinates
+\item \strong{Density}: requires a column named \code{beta} representing
+methylation beta values
+\item \strong{Ternary}: requires columns \code{methyl},
+\code{unmodified}, and \code{hydroxy}
+\item \strong{Length vs significance}: requires \code{start},
+\code{end}, and p-values
+\item \strong{P-value along genome}: requires p-values and genomic
+position columns
 }
 
-For comb-p DMR results, common usage is:
-\preformatted{
-plots = c("manhattan", "len_vs_p")
-}
+For ternary composition plots, input data can be generated using
+\code{\link{compute_modification_composition}}.
 
-For ternary plots, input must already contain \code{methyl}, \code{unmodified},
-and \code{hydroxy} columns (e.g. from \code{\link{compute_modification_composition}}).
+Density plots are intended specifically for visualizing the distribution of
+methylation beta values across sites.
+
+The function uses internal helper routines to:
+\itemize{
+\item apply a consistent publication-style theme
+\item apply standardized discrete color and fill scales
+\item maintain visually consistent axis and legend formatting across plots
+}
 }
 \examples{
 \dontrun{
+# Example 1: site-level differential methylation results
 plots <- visualize_diffmeth(
   x = res,
   plots = c("density", "volcano", "manhattan"),
   p_col = "pvalue",
   effect_col = "beta",
-  highlight_p = 0.05
+  color_by = "group",
+  highlight_p = 0.05,
+  palette = c("#1b9e77", "#d95f02"),
+  base_size = 12
 )
 
+# View one plot
+plots$volcano
+
+# Example 2: save all requested plots to a PDF
+plots <- visualize_diffmeth(
+  x = res,
+  plots = c("density", "volcano", "manhattan"),
+  p_col = "pvalue",
+  effect_col = "beta",
+  output_pdf = TRUE,
+  pdf_file = "diffmeth_publication_plots.pdf"
+)
+
+# Example 3: ternary plot for DMR composition
 comp <- compute_modification_composition(
   merged = merged,
   dmrs = dmrs_anno,
@@ -106,6 +193,22 @@ tern <- visualize_diffmeth(
   color_by = "group",
   facet_by = "group"
 )
+
+tern$ternary
+
+# Example 4: DMR length versus significance
+p_len <- visualize_diffmeth(
+  x = dmrs_anno,
+  plots = "len_vs_p",
+  p_col = "pvalue",
+  chr_col = "chr",
+  start_col = "start",
+  end_col = "end"
+)
 }
 
+}
+\seealso{
+\code{\link{compute_modification_composition}},
+\code{\link{run_pqlseq}}
 }
