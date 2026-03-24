@@ -32,8 +32,6 @@ run_pqlseq <- function(
   if (!requireNamespace("PQLseq2", quietly = TRUE))
     stop("Package 'PQLseq2' is required.")
 
-
-  #read phenotype
   pheno <- utils::read.csv(pheno_file, stringsAsFactors = FALSE)
 
   if (!subject_id_var %in% names(pheno))
@@ -48,7 +46,6 @@ run_pqlseq <- function(
 
   pheno[[subject_id_var]] <- as.character(pheno[[subject_id_var]])
 
-  #auto-factor numeric-coded categorical covariates
   for (cv in covariates) {
     if (is.numeric(pheno[[cv]]) || is.integer(pheno[[cv]])) {
       u <- unique(pheno[[cv]][!is.na(pheno[[cv]])])
@@ -62,7 +59,6 @@ run_pqlseq <- function(
       pheno[[cv]] <- as.factor(pheno[[cv]])
   }
 
-
   if (is.null(prep$MCounts) || is.null(prep$TCounts))
     stop("prep must contain $MCounts and $TCounts.")
 
@@ -75,13 +71,12 @@ run_pqlseq <- function(
   if (!all(c("chr", "start") %in% names(TC_all)))
     stop("prep$TCounts must include 'chr' and 'start'.")
 
-  coords <- MC_all[, c("chr","start"), drop = FALSE]
-  MC <- MC_all[, setdiff(names(MC_all), c("chr","start")), drop = FALSE]
-  TC <- TC_all[, setdiff(names(TC_all), c("chr","start")), drop = FALSE]
+  coords <- MC_all[, c("chr", "start"), drop = FALSE]
+  MC <- MC_all[, setdiff(names(MC_all), c("chr", "start")), drop = FALSE]
+  TC <- TC_all[, setdiff(names(TC_all), c("chr", "start")), drop = FALSE]
 
   if (!identical(colnames(MC), colnames(TC)))
     stop("MCounts and TCounts sample columns do not match.")
-
 
   keep <- pheno[[subject_id_var]] %in% colnames(MC)
 
@@ -96,27 +91,23 @@ run_pqlseq <- function(
   MC <- MC[, sample_ids, drop = FALSE]
   TC <- TC[, sample_ids, drop = FALSE]
 
-
   x <- as.numeric(pheno[[predictor_var]])
   if (anyNA(x))
     stop("Predictor contains NA after coercion.")
   x <- matrix(x, ncol = 1)
 
   W <- stats::model.matrix(
-    stats::as.formula(paste("~", paste(covariates, collapse="+"))),
+    stats::as.formula(paste("~", paste(covariates, collapse = "+"))),
     data = pheno
   )
-
 
   n <- nrow(pheno)
 
   if (is.null(kinship_file)) {
     K <- diag(n)
   } else {
-
     kin_df <- utils::read.table(kinship_file, header = TRUE, check.names = FALSE, sep = "\t")
     kin_mat <- as.matrix(kin_df)
-
 
     if (!is.numeric(kin_mat[1,1]) && ncol(kin_mat) > 1) {
       rn <- kin_mat[,1]
@@ -126,7 +117,6 @@ run_pqlseq <- function(
 
     storage.mode(kin_mat) <- "numeric"
 
-
     if (!is.null(rownames(kin_mat)) && !is.null(colnames(kin_mat)) &&
         all(sample_ids %in% rownames(kin_mat)) && all(sample_ids %in% colnames(kin_mat))) {
       kin_mat <- kin_mat[sample_ids, sample_ids, drop = FALSE]
@@ -134,21 +124,22 @@ run_pqlseq <- function(
 
     if (!all(dim(kin_mat) == c(n, n)))
       stop("Kinship matrix must be ", n, " x ", n,
-           " after alignment. Got: ", paste(dim(kin_mat), collapse=" x "))
+           " after alignment. Got: ", paste(dim(kin_mat), collapse = " x "))
 
     K <- kin_mat
   }
 
+  Y <- as.matrix(MC)
+  storage.mode(Y) <- "numeric"
 
-  Y <- as.matrix(MC); storage.mode(Y) <- "numeric"
-  Tmat <- as.matrix(TC); storage.mode(Tmat) <- "numeric"
+  Tmat <- as.matrix(TC)
+  storage.mode(Tmat) <- "numeric"
 
   if (any(Tmat < Y, na.rm = TRUE))
     stop("Some trials < successes.")
 
-
   nonboundary <- (Tmat > 0) & (Y > 0) & (Y < Tmat)
-  keep_sites <- rowSums(nonboundary) >= max(6, ceiling(ncol(Y)/2))
+  keep_sites <- rowSums(nonboundary) >= max(6, ceiling(ncol(Y) / 2))
 
   Y <- Y[keep_sites, , drop = FALSE]
   Tmat <- Tmat[keep_sites, , drop = FALSE]
@@ -159,21 +150,47 @@ run_pqlseq <- function(
     stop("No sites remain after stability filtering.")
 
 
-  fit <- PQLseq2::pqlseq2(
-    Y = Y,
-    x = x,
-    K = K,
-    W = W,
-    lib_size = Tmat,
-    model = "BMM",
-    ncores = 1,
-    filter = FALSE,
-    verbose = FALSE
+  pqlseq_warnings <- character(0)
+  shown_warnings <- 0L
+
+  fit <- withCallingHandlers(
+    PQLseq2::pqlseq2(
+      Y = Y,
+      x = x,
+      K = K,
+      W = W,
+      lib_size = Tmat,
+      model = "BMM",
+      ncores = 1,
+      filter = FALSE,
+      verbose = FALSE
+    ),
+    warning = function(w) {
+      msg <- conditionMessage(w)
+      pqlseq_warnings <<- c(pqlseq_warnings, msg)
+
+      if (shown_warnings < 50L) {
+        shown_warnings <<- shown_warnings + 1L
+        message("Warning [", shown_warnings, "]: ", msg)
+      } else if (shown_warnings == 50L) {
+        shown_warnings <<- shown_warnings + 1L
+        message("Additional warnings suppressed. Type pqlseq_error to view all warnings.")
+      }
+
+      invokeRestart("muffleWarning")
+    }
   )
+
+  assign("pqlseq_error", pqlseq_warnings, envir = parent.frame())
+
+  if (length(pqlseq_warnings) > 0) {
+    message("Captured ", length(pqlseq_warnings),
+            " total warnings. Type pqlseq_error to view all warnings.")
+  }
+
 
   res <- cbind(coords, as.data.frame(fit, stringsAsFactors = FALSE))
   rownames(res) <- NULL
-
 
   if (keep_only_converged && "converged" %in% names(res)) {
     res$converged <- as.logical(res$converged)
@@ -181,13 +198,13 @@ run_pqlseq <- function(
     rownames(res) <- NULL
   }
 
-
   if ("pvalue" %in% names(res)) {
     res$pvalue <- suppressWarnings(as.numeric(res$pvalue))
     res <- res[order(res$pvalue), , drop = FALSE]
     rownames(res) <- NULL
   }
 
-  utils::write.table(res, output_file, sep="\t", quote=FALSE, row.names=FALSE)
+  utils::write.table(res, output_file, sep = "\t", quote = FALSE, row.names = FALSE)
+
   res
 }

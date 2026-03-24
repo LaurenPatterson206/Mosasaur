@@ -13,7 +13,10 @@ annotate(
   start_col = "start",
   end_col = "end",
   promoter_upstream = 2000,
-  promoter_downstream = 0
+  promoter_downstream = 0,
+  map_gene_names = TRUE,
+  biomart_dataset = "mmulatta_gene_ensembl",
+  biomart_id_col = "entrezgene_id"
 )
 }
 \arguments{
@@ -28,6 +31,13 @@ annotate(
 \item{chr_col, start_col, end_col}{Column names for coordinates.}
 
 \item{promoter_upstream, promoter_downstream}{Promoter definition.}
+
+\item{map_gene_names}{Logical; if TRUE, attempts to map nearest gene IDs to gene symbols.}
+
+\item{biomart_dataset}{biomaRt dataset name. Example: "mmulatta_gene_ensembl".}
+
+\item{biomart_id_col}{ID type expected in TxDb gene IDs for biomaRt mapping.
+Common values: "entrezgene_id", "ensembl_gene_id".}
 }
 \value{
 data.frame with added annotation columns.

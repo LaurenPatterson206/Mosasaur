@@ -33,7 +33,8 @@ Imports:
     ggplot2,
     rlang,
     methods,
-    txdbmaker
+    txdbmaker,
+    biomaRt
 Remotes:
     zhengli09/PQLseq2
 Suggests:
