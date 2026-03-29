@@ -20,7 +20,7 @@
 #'   and \code{is_effect}.
 #'
 #' @importFrom MGLM rdirmn
-#' @export
+#' @exportcheck()
 sim_mod <- function(
     n_controls,
     n_cases,
