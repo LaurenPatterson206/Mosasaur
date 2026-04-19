@@ -1,4 +1,4 @@
-#' Visualize QC metrics for merged modification count tables
+3#' Visualize QC metrics for merged modification count tables
 #'
 #' Generates histograms and/or density plots for key QC summaries derived from a
 #' merged Mosasaur table (e.g., output of \code{\link{merge_data}} or
